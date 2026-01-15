@@ -1,0 +1,53 @@
+name: Publish NuGet Package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Setup .NET
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0.x
+
+      # 3. Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # 4. Installxmllint
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
+      # 5. 读取 csproj 中的 Version
+      - name: Get Package Version from csproj
+        id: get_version
+        run: |
+          VERSION=$(xmllint --xpath "string(//Project/PropertyGroup/Version)" ./RabbitContracts/RabbitContracts.csproj)
+          echo "Package version from csproj: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # 6. Pack NuGet package（使用 csproj 中的版本号）
+      - name: Pack NuGet package
+        run: |
+          dotnet pack ./RabbitContracts/RabbitContracts.csproj -c Release /p:PackageVersion=$VERSION
+
+      # 7. Push to GitHub Packages
+      - name: Push NuGet package
+        run: |
+          dotnet nuget push "RabbitContracts/bin/Release/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key ${{ secrets.GH_PACKAGES_PAT  }} \
+            --skip-duplicate
